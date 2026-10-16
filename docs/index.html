@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>實習倉 WMS · Laravel 12 簡易庫存管理系統</title>
+<meta name="description" content="用 Laravel 12 做的醫材庫存管理系統：商品主檔、入出庫、交易＋列鎖防超賣、低庫存提醒、Bearer Token REST API。附瀏覽器內互動 Demo。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Noto+Serif+TC:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ink: #1c1914; --paper: #f3ead4; --panel: #fff8e8; --line: #c9b48a;
+  --olive: #3f5c3a; --olive-dark: #2a3d28; --rust: #9c4221; --warn: #c45c26;
+  --ok: #2f6b4f; --muted: #6d6250; --rail: #241f18; --gold: #d4b36a; --code-bg: #efe2c4;
+  --mono: "IBM Plex Mono", Consolas, monospace;
+  --serif: "Noto Serif TC", "Source Han Serif TC", "PMingLiU", Georgia, serif;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body { margin: 0; font-family: var(--serif); color: var(--ink); background: var(--paper); line-height: 1.7; }
+a { color: var(--olive-dark); }
+code { font-family: var(--mono); font-size: .85em; background: var(--code-bg); padding: .1rem .35rem; }
+.wrap { width: min(1080px, 100% - 32px); margin: 0 auto; }
+
+/* top bar */
+.top { position: sticky; top: 0; z-index: 10; background: var(--rail); color: var(--paper); }
+.top .wrap { display: flex; align-items: center; gap: 1.2rem; height: 56px; }
+.logo { font-family: var(--mono); font-weight: 600; letter-spacing: .06em; color: var(--gold); text-decoration: none; white-space: nowrap; }
+.top nav { display: flex; gap: 1rem; overflow-x: auto; flex: 1; }
+.top nav a { color: #e6dcc3; text-decoration: none; font-size: .92rem; white-space: nowrap; }
+.top nav a:hover { color: var(--gold); }
+.top .cta { font-family: var(--mono); font-size: .82rem; color: var(--rail); background: var(--gold); padding: .35rem .7rem; text-decoration: none; white-space: nowrap; }
+
+/* hero */
+.hero { padding: 4.5rem 0 3.5rem; border-bottom: 1px solid var(--line); background:
+  radial-gradient(circle at 85% 10%, #d4b36a40, transparent 40%),
+  repeating-linear-gradient(135deg, transparent 0 22px, #e8d9b4 22px 23px); }
+.eyebrow { font-family: var(--mono); font-size: .75rem; letter-spacing: .2em; text-transform: uppercase; color: var(--muted); margin: 0 0 .6rem; }
+.hero h1 { font-size: clamp(2rem, 5.5vw, 3.4rem); font-weight: 900; line-height: 1.2; margin: 0; }
+.hero .en { font-family: var(--mono); color: var(--muted); font-size: clamp(.85rem, 2vw, 1rem); margin: .6rem 0 1.2rem; }
+.hero .lead { max-width: 40rem; font-size: 1.08rem; margin: 0 0 1.8rem; }
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .8rem; margin-bottom: 1.8rem; max-width: 760px; }
+.stat { background: var(--panel); border: 1px solid var(--line); padding: .8rem .9rem; box-shadow: 3px 3px 0 #e0d1ad; }
+.stat strong { display: block; font-family: var(--mono); font-size: 1.7rem; line-height: 1.2; }
+.stat span { font-size: .85rem; color: var(--muted); }
+.buttons { display: flex; gap: .7rem; flex-wrap: wrap; margin-bottom: 1.6rem; }
+.btn { display: inline-block; background: var(--olive); color: #fff; text-decoration: none; padding: .7rem 1.2rem; border: 1px solid var(--olive); }
+.btn:hover { background: var(--olive-dark); }
+.btn.ghost { background: transparent; color: var(--olive-dark); font-family: var(--mono); font-size: .9rem; }
+.btn.ghost:hover { background: #ece0c2; }
+.tags { display: flex; flex-wrap: wrap; gap: .4rem; }
+.tags span { font-family: var(--mono); font-size: .78rem; border: 1px solid var(--line); background: #fbf3df; padding: .15rem .55rem; }
+
+/* sections */
+section.block { padding: 3.5rem 0; border-bottom: 1px dashed var(--line); }
+.sec-label { font-family: var(--mono); font-size: .8rem; letter-spacing: .14em; color: var(--rust); margin: 0 0 .3rem; }
+h2 { font-size: clamp(1.4rem, 3.5vw, 1.9rem); margin: 0 0 .8rem; }
+h3 { font-size: 1.05rem; margin: 0 0 .4rem; }
+.intro { max-width: 46rem; margin: 0 0 1.6rem; }
+.muted { color: var(--muted); }
+
+/* architecture flow */
+.flow { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0; margin-bottom: 1.2rem; }
+.step { background: var(--panel); border: 1px solid var(--line); padding: .8rem .7rem; position: relative; min-width: 0; }
+.step + .step { border-left: 0; }
+.step::after { content: "→"; position: absolute; right: -.55rem; top: 50%; transform: translateY(-50%); font-family: var(--mono); color: var(--rust); background: var(--paper); line-height: 1; z-index: 1; }
+.step:last-child::after { content: none; }
+.step .n { font-family: var(--mono); font-size: .7rem; color: var(--muted); }
+.step strong { display: block; font-size: .95rem; }
+.step code { display: inline-block; margin-top: .35rem; font-size: .72rem; word-break: break-all; }
+.step small { display: block; color: var(--muted); font-size: .8rem; line-height: 1.5; margin-top: .3rem; }
+.lanes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem; }
+.lane { border: 1px solid var(--line); padding: .8rem 1rem; background: #fbf3df; }
+.lane b { font-family: var(--mono); font-size: .8rem; color: var(--rust); }
+
+/* features */
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .9rem; }
+.card { background: var(--panel); border: 1px solid var(--line); padding: 1rem 1.1rem; }
+.card .ico { font-family: var(--mono); font-size: .78rem; color: var(--gold); background: var(--rail); display: inline-block; padding: .1rem .45rem; margin-bottom: .5rem; }
+.card p { margin: 0; font-size: .93rem; }
+.card .file { display: block; margin-top: .55rem; font-family: var(--mono); font-size: .75rem; color: var(--muted); }
+
+/* concurrency */
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 1.4rem; align-items: start; }
+pre { background: var(--rail); color: #efe5cc; font-family: var(--mono); font-size: .8rem; line-height: 1.6; padding: 1rem; overflow-x: auto; margin: 0; }
+pre .k { color: var(--gold); } pre .c { color: #9b8e74; }
+.compare { border-collapse: collapse; width: 100%; font-size: .9rem; margin: 1rem 0; }
+.compare th, .compare td { border: 1px solid var(--line); padding: .45rem .6rem; text-align: left; vertical-align: top; }
+.compare th { background: #f5ead0; font-weight: 700; }
+.compare .bad { background: #fde8d8; } .compare .good { background: #e4f0e6; }
+
+/* tables */
+.table-wrap { overflow-x: auto; }
+table.plain { width: 100%; border-collapse: collapse; font-size: .92rem; }
+table.plain th, table.plain td { text-align: left; padding: .55rem .5rem; border-bottom: 1px dashed var(--line); vertical-align: top; }
+table.plain th { font-weight: 400; color: var(--muted); font-size: .82rem; }
+.verb { font-family: var(--mono); font-size: .75rem; padding: .05rem .4rem; color: #fff; display: inline-block; min-width: 3.2rem; text-align: center; }
+.verb.get { background: var(--ok); } .verb.post { background: var(--rust); } .verb.put { background: #7a5a1f; }
+
+/* schema */
+.schema { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .9rem; }
+.schema .card ul { list-style: none; margin: .4rem 0 0; padding: 0; font-family: var(--mono); font-size: .8rem; }
+.schema .card li { padding: .2rem 0; border-bottom: 1px dotted var(--line); display: flex; justify-content: space-between; gap: .6rem; }
+.schema .card li span { color: var(--muted); text-align: right; }
+
+/* install */
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: .8rem; }
+.steps li { min-width: 0; counter-increment: s; background: var(--panel); border: 1px solid var(--line); padding: .9rem 1rem .9rem 3.2rem; position: relative; }
+.steps li::before { content: counter(s, decimal-leading-zero); position: absolute; left: 1rem; top: .9rem; font-family: var(--mono); color: var(--rust); font-weight: 600; }
+.steps pre { margin-top: .5rem; }
+.callout { border-left: 4px solid var(--warn); background: #fde8d8; padding: .8rem 1rem; margin: 1rem 0 0; font-size: .92rem; }
+.callout ul { margin: .3rem 0 0; padding-left: 1.2rem; }
+
+/* learn */
+.learn { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .6rem; list-style: none; padding: 0; margin: 0; }
+.learn li { background: var(--panel); border: 1px solid var(--line); padding: .55rem .7rem; font-size: .88rem; }
+.learn code { background: none; padding: 0; display: block; font-size: .75rem; color: var(--muted); }
+
+footer.site { background: var(--rail); color: #cfc3a6; padding: 2rem 0; font-size: .88rem; }
+footer.site .wrap { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+footer.site a { color: var(--gold); font-family: var(--mono); }
+
+a:focus-visible, .btn:focus-visible { outline: 2px solid var(--rust); outline-offset: 2px; }
+
+@media (max-width: 900px) {
+  .flow { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem; }
+  .step + .step { border-left: 1px solid var(--line); }
+  .step::after { content: none; }
+  .grid3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .two, .lanes, .schema { grid-template-columns: minmax(0, 1fr); }
+  .learn { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+  .top nav { display: none; }
+  .top .wrap { justify-content: space-between; }
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid3 { grid-template-columns: minmax(0, 1fr); }
+  .hero { padding: 3rem 0 2.5rem; }
+  section.block { padding: 2.6rem 0; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <a class="logo" href="#top">INVENTORY_WMS /</a>
+    <nav aria-label="頁內導覽">
+      <a href="#architecture">架構</a><a href="#features">功能</a><a href="#concurrency">防超賣</a><a href="#security">安全</a><a href="#api">API</a><a href="#install">安裝</a>
+    </nav>
+    <a class="cta" href="demo.html">互動 Demo →</a>
+  </div>
+</header>
+
+<main id="top">
+  <section class="hero">
+    <div class="wrap">
+      <p class="eyebrow">Laravel 12 · Blade · Eloquent · REST API</p>
+      <h1>實習倉 WMS<br>醫材簡易庫存管理系統</h1>
+      <p class="en">A small Laravel inventory system for a medical-supply storeroom</p>
+      <p class="lead">商品主檔、入庫、出庫、低庫存提醒、異動稽核，再加一組 Bearer Token API。出庫用資料庫交易＋列鎖包起來，兩個人同時領料也不會超賣。</p>
+      <div class="stats">
+        <div class="stat"><strong>7</strong><span>REST API 端點</span></div>
+        <div class="stat"><strong>5</strong><span>Migration</span></div>
+        <div class="stat"><strong>3</strong><span>Feature 測試</span></div>
+        <div class="stat"><strong>0</strong><span>行拼接 SQL</span></div>
+      </div>
+      <div class="buttons">
+        <a class="btn" href="demo.html">查看互動 Demo</a>
+        <a class="btn ghost" href="https://github.com/Tai-Ju/php-inventory-wms">VIEW ON GITHUB →</a>
+      </div>
+      <div class="tags"><span>PHP 8.2+</span><span>Laravel 12</span><span>Blade</span><span>Eloquent ORM</span><span>SQLite / MySQL</span><span>PHPUnit</span><span>Bearer Token</span><span>Form Request</span></div>
+    </div>
+  </section>
+
+  <section class="block" id="architecture">
+    <div class="wrap">
+      <p class="sec-label">01 / ARCHITECTURE</p>
+      <h2>一個請求怎麼走完</h2>
+      <p class="intro">網頁和 API 共用同一條後段：驗證寫在 Form Request、商業規則集中在 Service、Controller 只負責接線。所以畫面和 API 的入出庫行為保證一致。</p>
+      <div class="flow">
+        <div class="step"><span class="n">01</span><strong>Route</strong><code>routes/web.php</code><code>routes/api.php</code></div>
+        <div class="step"><span class="n">02</span><strong>Middleware</strong><small>網頁：Session 登入＋CSRF<br>API：VerifyApiToken</small></div>
+        <div class="step"><span class="n">03</span><strong>Form Request</strong><small>ProductRequest<br>StockMovementRequest</small></div>
+        <div class="step"><span class="n">04</span><strong>Controller</strong><small>Product / Stock / Dashboard / Api</small></div>
+        <div class="step"><span class="n">05</span><strong>StockService</strong><small>交易＋列鎖<br>入庫／出庫唯一入口</small></div>
+        <div class="step"><span class="n">06</span><strong>Eloquent → DB</strong><small>Product<br>StockMovement</small></div>
+      </div>
+      <div class="lanes">
+        <div class="lane"><b>WEB</b>　回傳 Blade 畫面，<code>{{ }}</code> 自動跳脫輸出，錯誤用 flash 訊息帶回表單。</div>
+        <div class="lane"><b>API</b>　回傳 JSON：200 / 201 成功，401 沒有或錯的 token，422 驗證失敗或庫存不足。</div>
+      </div>
+
+      <h3 style="margin-top:2rem">資料模型</h3>
+      <div class="schema">
+        <div class="card"><h3>products</h3><ul>
+          <li>sku<span>string(50) unique · 料號</span></li><li>name<span>string(120) · 品名</span></li><li>unit<span>string(20) · 單位</span></li>
+          <li>quantity<span>unsigned int · 現有量</span></li><li>safety_stock<span>unsigned int · 安全庫存</span></li><li>location<span>string(80) · 儲位</span></li></ul></div>
+        <div class="card"><h3>stock_movements</h3><ul>
+          <li>product_id<span>FK · cascade delete</span></li><li>user_id<span>FK · 經手人</span></li><li>type<span>in / out</span></li>
+          <li>quantity<span>本次數量</span></li><li>before_qty → after_qty<span>異動前後，可稽核</span></li><li>remark<span>單號／用途</span></li></ul></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="features">
+    <div class="wrap">
+      <p class="sec-label">02 / FEATURES</p>
+      <h2>功能</h2>
+      <div class="grid3">
+        <article class="card"><span class="ico">CRUD</span><h3>商品主檔</h3><p>新增、編輯、刪除；料號唯一。新品庫存從 0 開始，只能靠入庫增加，帳不會被手動改亂。</p><span class="file">ProductController · ProductRequest</span></article>
+        <article class="card"><span class="ico">IN / OUT</span><h3>入庫、出庫</h3><p>每筆都寫一筆異動，記下異動前、後的數量和經手人。出庫量大於現有量直接擋下。</p><span class="file">StockService · StockController</span></article>
+        <article class="card"><span class="ico">LOCK</span><h3>防止超賣</h3><p><code>DB::transaction</code>＋<code>lockForUpdate()</code>，同時出庫也只會有一筆成功。</p><span class="file">StockService::outbound</span></article>
+        <article class="card"><span class="ico">ALERT</span><h3>低庫存提醒</h3><p>現有量 ≤ 安全庫存就標紅、出現在看板的提醒清單，側欄顯示件數。</p><span class="file">Product::scopeLowStock</span></article>
+        <article class="card"><span class="ico">QUERY</span><h3>庫存查詢</h3><p>依料號、品名、儲位搜尋；異動紀錄可篩入庫／出庫。</p><span class="file">DashboardController · history</span></article>
+        <article class="card"><span class="ico">API</span><h3>REST API</h3><p>Bearer Token 驗證，token 只存 SHA-256 雜湊。可接其他系統做自動補貨或報表。</p><span class="file">InventoryApiController · VerifyApiToken</span></article>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="concurrency">
+    <div class="wrap">
+      <p class="sec-label">03 / CONCURRENCY</p>
+      <h2>兩個護理站同時領最後幾瓶酒精</h2>
+      <div class="two">
+        <div>
+          <p style="margin-top:0">酒精剩 8 瓶，A、B 同一瞬間各出庫 6 瓶。如果只是「讀 → 判斷 → 寫」，兩個請求都讀到 8，兩個都成功，帳上剩 2、實際被領走 12。</p>
+          <table class="compare">
+            <thead><tr><th></th><th>沒有鎖</th><th>交易＋列鎖</th></tr></thead>
+            <tbody>
+              <tr><th>B 讀到</th><td class="bad">8（舊值）</td><td class="good">2（等 A 提交後）</td></tr>
+              <tr><th>結果</th><td class="bad">兩筆都 201</td><td class="good">A 201、B 422</td></tr>
+              <tr><th>帳實</th><td class="bad">帳上 2，實際超賣 4 瓶</td><td class="good">帳上 2，架上 2</td></tr>
+            </tbody>
+          </table>
+          <p class="muted" style="font-size:.9rem">SQLite 會鎖整個資料庫的寫入，MySQL InnoDB 是真正的列鎖。同一段程式在兩種資料庫下結果都正確。</p>
+          <a class="btn" href="demo.html#/race">在 Demo 裡看動畫對照</a>
+        </div>
+<pre><span class="k">public function</span> outbound(Product $product, int $qty, ...): StockMovement
+{
+    <span class="k">return</span> DB::transaction(<span class="k">function</span> () <span class="k">use</span> (...) {
+        <span class="c">// SELECT ... FOR UPDATE：其他交易要等這裡提交</span>
+        $locked = Product::query()
+            ->lockForUpdate()
+            ->findOrFail($product->id);
+        $before = $locked->quantity;
+
+        <span class="k">if</span> ($qty > $before) {
+            <span class="c">// 丟例外 → 交易回滾，庫存不變</span>
+            <span class="k">throw</span> InsufficientStockException::for(
+                $locked->sku, $before, $qty);
+        }
+
+        $locked->quantity = $before - $qty;
+        $locked->save();
+
+        <span class="k">return</span> StockMovement::query()->create([
+            'type' => 'out', 'quantity' => $qty,
+            'before_qty' => $before,
+            'after_qty'  => $locked->quantity, ...
+        ]);
+    });
+}</pre>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="security">
+    <div class="wrap">
+      <p class="sec-label">04 / SECURITY</p>
+      <h2>安全對照</h2>
+      <div class="table-wrap"><table class="plain">
+        <thead><tr><th>風險</th><th>作法</th><th>位置</th></tr></thead>
+        <tbody>
+          <tr><td>SQL Injection</td><td>全部走 Eloquent／Query Builder（底層是 PDO Prepared Statements），不拼接 SQL</td><td><code>app/Models</code></td></tr>
+          <tr><td>XSS</td><td>Blade <code>{{ }}</code> 自動跳脫；不對使用者輸入用 <code>{!! !!}</code></td><td><code>resources/views</code></td></tr>
+          <tr><td>CSRF</td><td>所有表單帶 <code>@csrf</code>，web 中介層驗證</td><td><code>layouts/app.blade.php</code></td></tr>
+          <tr><td>密碼</td><td><code>User</code> 的 <code>hashed</code> cast（bcrypt），不存明文</td><td><code>Models/User.php</code></td></tr>
+          <tr><td>API Token</td><td>資料庫只存 SHA-256；註冊時只顯示一次</td><td><code>VerifyApiToken.php</code></td></tr>
+          <tr><td>輸入驗證</td><td>Form Request 集中定義規則，網頁和 API 共用</td><td><code>app/Http/Requests</code></td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <section class="block" id="api">
+    <div class="wrap">
+      <p class="sec-label">05 / API</p>
+      <h2>REST API</h2>
+      <p class="intro">標頭帶 <code>Authorization: Bearer &lt;token&gt;</code>。示範 token：<code>demo-api-token</code>。完整說明見 <a href="https://github.com/Tai-Ju/php-inventory-wms/blob/main/docs/API.md">docs/API.md</a>，也可以直接在 <a href="demo.html#/api">Demo 的 API 測試台</a>送請求。</p>
+      <div class="table-wrap"><table class="plain">
+        <thead><tr><th>方法</th><th>路徑</th><th>說明</th><th>回應</th></tr></thead>
+        <tbody>
+          <tr><td><span class="verb get">GET</span></td><td><code>/api/products</code></td><td>商品列表，支援 <code>?q=</code>、<code>?low=1</code></td><td>200</td></tr>
+          <tr><td><span class="verb get">GET</span></td><td><code>/api/products/{id}</code></td><td>單一商品＋異動歷史</td><td>200 / 404</td></tr>
+          <tr><td><span class="verb post">POST</span></td><td><code>/api/products</code></td><td>新增商品（庫存從 0 開始）</td><td>201 / 422</td></tr>
+          <tr><td><span class="verb put">PUT</span></td><td><code>/api/products/{id}</code></td><td>更新商品資料</td><td>200 / 422</td></tr>
+          <tr><td><span class="verb get">GET</span></td><td><code>/api/stock/low</code></td><td>低庫存清單</td><td>200</td></tr>
+          <tr><td><span class="verb post">POST</span></td><td><code>/api/stock/in</code></td><td>入庫</td><td>201 / 422</td></tr>
+          <tr><td><span class="verb post">POST</span></td><td><code>/api/stock/out</code></td><td>出庫；庫存不足回 422</td><td>201 / 422</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <section class="block" id="install">
+    <div class="wrap">
+      <p class="sec-label">06 / INSTALL</p>
+      <h2>在自己電腦跑起來</h2>
+      <ol class="steps">
+        <li><strong>準備環境</strong>：PHP 8.2 以上與 Composer。Windows 建議裝 <a href="https://herd.laravel.com/windows">Laravel Herd</a>，PHP 和 Composer 都包好了。</li>
+        <li><strong>取得程式並安裝套件</strong>
+<pre>git clone https://github.com/Tai-Ju/php-inventory-wms
+cd php-inventory-wms/inventory-wms
+copy .env.example .env
+composer install
+php artisan key:generate</pre></li>
+        <li><strong>建立資料表與示範資料</strong>（預設 SQLite，免裝資料庫）
+<pre>php artisan migrate --seed
+php artisan test</pre></li>
+        <li><strong>啟動</strong>，開 <code>http://127.0.0.1:8000</code>，帳號 <code>warehouse@example.com</code>／<code>password</code>
+<pre>php artisan serve</pre></li>
+      </ol>
+      <div class="callout"><strong>Windows 小提醒</strong>
+        <ul>
+          <li>也可以直接點兩下 <code>inventory-wms/setup.bat</code>，一次完成上面所有步驟。</li>
+          <li><code>artisan serve</code> 出現 <code>Failed to listen … (reason: ?)</code> 時，改在 <code>public</code> 資料夾用 <code>php -S</code> 啟動（指令見 README）。</li>
+          <li>專案不要放在 OneDrive 同步資料夾，SQLite 檔可能被鎖住。</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="learn">
+    <div class="wrap">
+      <p class="sec-label">07 / LEARNING PATH</p>
+      <h2>先打底，再寫 Laravel</h2>
+      <p class="intro">repo 裡的 <code>learn/</code> 是做這個系統之前的 11 個純 PHP 練習，每一個都對應到系統裡用到的觀念。</p>
+      <ul class="learn">
+        <li>變數、陣列、foreach<code>01–02</code></li><li>函式、條件判斷<code>03–04</code></li><li>OOP、例外處理<code>05–06</code></li><li>GET / POST 表單<code>07</code></li>
+        <li>Session、Cookie<code>08</code></li><li>HTTP 狀態碼<code>09</code></li><li>PDO Prepared Statements<code>10</code></li><li>CSRF、XSS、密碼雜湊<code>11</code></li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>Tai-Ju Liu · 2026 · 學習作品，示範資料皆為虛構</span>
+    <span><a href="demo.html">DEMO</a>　<a href="https://github.com/Tai-Ju/php-inventory-wms">GITHUB →</a></span>
+  </div>
+</footer>
+</body>
+</html>

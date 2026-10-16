@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>互動 Demo · 實習倉 WMS</title>
+<meta name="description" content="Laravel 12 簡易庫存管理系統的瀏覽器內互動 Demo：入庫、出庫、超賣防護、低庫存提醒與 REST API 測試台。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Noto+Serif+TC:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ink: #1c1914; --paper: #f3ead4; --panel: #fff8e8; --line: #c9b48a;
+  --olive: #3f5c3a; --olive-dark: #2a3d28; --rust: #9c4221; --warn: #c45c26;
+  --ok: #2f6b4f; --muted: #6d6250; --rail: #241f18; --gold: #d4b36a;
+  --low-bg: #fde8d8; --ok-bg: #e4f0e6; --code-bg: #efe2c4;
+  --mono: "IBM Plex Mono", Consolas, monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; }
+body { font-family: "Noto Serif TC", "Source Han Serif TC", "PMingLiU", Georgia, serif; color: var(--ink); background: var(--paper); line-height: 1.55; }
+a { color: var(--olive-dark); }
+code, .mono { font-family: var(--mono); font-size: .85rem; }
+code { background: var(--code-bg); padding: .1rem .35rem; }
+button { font: inherit; }
+
+/* Demo banner */
+.banner { background: var(--ink); color: var(--paper); font-size: .85rem; padding: .55rem 1rem; display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; }
+.banner .badge { font-family: var(--mono); font-size: .72rem; letter-spacing: .14em; border: 1px solid var(--gold); color: var(--gold); padding: .1rem .45rem; }
+.banner .grow { flex: 1 1 260px; color: #d9cdb2; }
+.banner a, .banner button.linkish { color: var(--gold); }
+
+/* Shell */
+.shell { display: grid; grid-template-columns: 236px minmax(0, 1fr); min-height: calc(100vh - 40px); }
+.rail { background: var(--rail); color: var(--paper); padding: 1.4rem 1rem; display: flex; flex-direction: column; gap: 1.4rem; }
+.brand { display: flex; gap: .75rem; align-items: center; }
+.brand-mark { width: 42px; height: 42px; display: grid; place-items: center; border: 2px solid var(--gold); color: var(--gold); font-weight: 700; font-family: var(--mono); flex: none; }
+.brand small { display: block; color: #bba98a; }
+.rail nav { display: flex; flex-direction: column; gap: .3rem; }
+.rail nav a { color: var(--paper); text-decoration: none; padding: .5rem .7rem; border-left: 3px solid transparent; white-space: nowrap; }
+.rail nav a.is-on { border-left-color: var(--gold); background: #352c22; }
+.rail nav a:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.rail nav .sep { border-top: 1px dashed #4a3f31; margin: .4rem 0; }
+.pill { display: inline-block; margin-left: .4rem; background: var(--warn); color: #fff; border-radius: 999px; padding: 0 .45rem; font-size: .75rem; font-family: var(--mono); }
+.rail-foot { margin-top: auto; font-size: .9rem; color: #bba98a; }
+.linkish { background: none; border: 0; color: var(--gold); cursor: pointer; text-decoration: underline; padding: 0; }
+
+.stage { padding: 1.6rem 2rem 3rem; min-width: 0; }
+.page-head { display: flex; justify-content: space-between; gap: 1rem; align-items: end; margin-bottom: 1.2rem; flex-wrap: wrap; }
+.eyebrow { letter-spacing: .18em; text-transform: uppercase; color: var(--muted); font-size: .72rem; margin: 0 0 .25rem; font-family: var(--mono); }
+h1, h2, h3 { font-weight: 700; margin: 0 0 .4rem; }
+h1 { font-size: 1.7rem; } h2 { font-size: 1.15rem; }
+.muted { color: var(--muted); }
+
+.metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .8rem; margin-bottom: 1.2rem; }
+.metrics.two { grid-template-columns: repeat(2, minmax(0, 220px)); }
+.metrics article { background: var(--panel); border: 1px solid var(--line); padding: .9rem 1rem; box-shadow: 3px 3px 0 #e0d1ad; }
+.metrics span { color: var(--muted); font-size: .85rem; }
+.metrics strong { display: block; font-size: 1.8rem; font-family: var(--mono); }
+.metrics .warn { border-color: var(--warn); background: var(--low-bg); }
+
+.split { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, .9fr); gap: 1rem; }
+.panel { background: var(--panel); border: 1px solid var(--line); padding: 1rem 1.1rem; margin-bottom: 1rem; min-width: 0; }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: .5rem .4rem; border-bottom: 1px dashed var(--line); vertical-align: top; }
+th { font-size: .82rem; color: var(--muted); font-weight: 400; white-space: nowrap; }
+td.num { font-family: var(--mono); white-space: nowrap; }
+.row-low { background: var(--low-bg); }
+.alerts { list-style: none; padding: 0; margin: 0 0 1rem; }
+.alerts li { display: flex; justify-content: space-between; gap: .5rem; padding: .5rem 0; border-bottom: 1px dashed var(--line); }
+.alerts small { display: block; color: var(--muted); }
+.alerts em { font-style: normal; font-family: var(--mono); white-space: nowrap; }
+.alerts .in { color: var(--ok); } .alerts .out { color: var(--rust); }
+
+.btn { display: inline-block; background: var(--olive); color: #fff; text-decoration: none; border: 0; padding: .55rem .95rem; cursor: pointer; }
+.btn:hover { background: var(--olive-dark); }
+.btn.ghost { background: transparent; color: var(--olive-dark); border: 1px solid var(--olive); }
+.btn.ghost:hover { background: #ece0c2; }
+.btn.danger { background: var(--rust); }
+.btn.small { padding: .3rem .6rem; font-size: .88rem; }
+.btn:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--olive); outline-offset: 2px; }
+.actions { display: flex; gap: .4rem; flex-wrap: wrap; align-items: center; }
+
+.flash { padding: .7rem .9rem; margin-bottom: 1rem; border: 1px solid; }
+.flash.ok { background: var(--ok-bg); border-color: var(--ok); }
+.flash.bad { background: var(--low-bg); border-color: var(--warn); }
+.err { color: var(--rust); font-size: .88rem; }
+
+.search, .toolbar { display: flex; gap: .6rem; flex-wrap: wrap; align-items: end; }
+.form { display: flex; flex-direction: column; gap: .7rem; max-width: 540px; }
+label { display: flex; flex-direction: column; gap: .3rem; font-size: .92rem; }
+label.inline { flex-direction: row; align-items: center; gap: .4rem; }
+input, select, textarea { font: inherit; padding: .45rem .55rem; border: 1px solid var(--line); background: #fff; color: var(--ink); min-width: 0; }
+input.is-bad, select.is-bad { border-color: var(--rust); }
+
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: .8rem; }
+.card { background: var(--panel); border: 1px solid var(--line); padding: .9rem; }
+.card-low { border-color: var(--warn); box-shadow: inset 4px 0 0 var(--warn); }
+.card header { display: flex; justify-content: space-between; gap: .5rem; }
+.card footer { display: flex; gap: .6rem; margin-top: .6rem; flex-wrap: wrap; }
+.card .qty { font-family: var(--mono); font-size: 1.4rem; }
+.tag { background: var(--warn); color: #fff; font-size: .7rem; padding: .1rem .35rem; align-self: start; white-space: nowrap; }
+.chip { display: inline-block; font-family: var(--mono); font-size: .75rem; padding: .05rem .4rem; border: 1px solid; }
+.chip.in { color: var(--ok); border-color: var(--ok); } .chip.out { color: var(--rust); border-color: var(--rust); }
+
+/* source hint */
+.source { margin-top: 1.4rem; border-top: 1px dashed var(--line); padding-top: .8rem; font-size: .85rem; color: var(--muted); }
+.source a { font-family: var(--mono); font-size: .8rem; margin-right: .8rem; display: inline-block; }
+
+/* login gate */
+.gate-wrap { min-height: calc(100vh - 40px); display: grid; place-items: center; padding: 1.5rem 1rem; background: radial-gradient(circle at 20% 20%, #d4b36a33, transparent 35%), repeating-linear-gradient(135deg, #ead7ad 0 12px, #e2cc96 12px 24px); }
+.gate { width: min(420px, 100%); background: var(--panel); padding: 1.6rem; border: 1px solid var(--line); display: flex; flex-direction: column; gap: .75rem; box-shadow: 8px 8px 0 var(--rail); }
+.hint { background: var(--code-bg); padding: .6rem .75rem; font-size: .85rem; }
+
+/* concurrency */
+.race { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin-top: .8rem; }
+.lane { border: 1px solid var(--line); background: #fffdf6; }
+.lane h3 { font-size: .95rem; padding: .55rem .75rem; margin: 0; border-bottom: 1px solid var(--line); background: #f5ead0; }
+.lane.bad h3 { background: var(--low-bg); } .lane.good h3 { background: var(--ok-bg); }
+.lane ol { margin: 0; padding: .5rem .75rem .75rem 2rem; font-size: .88rem; min-height: 9rem; }
+.lane li { padding: .2rem 0; opacity: 0; transform: translateY(4px); transition: opacity .25s, transform .25s; }
+.lane li.show { opacity: 1; transform: none; }
+.lane li .who { font-family: var(--mono); font-weight: 600; }
+.lane li .who.a { color: #2f5a8a; } .lane li .who.b { color: #8a2f6b; }
+.lane .verdict { margin: 0 .75rem .75rem; padding: .5rem .6rem; font-size: .88rem; border: 1px solid; display: none; }
+.lane .verdict.show { display: block; }
+.lane.bad .verdict { border-color: var(--warn); background: var(--low-bg); }
+.lane.good .verdict { border-color: var(--ok); background: var(--ok-bg); }
+
+/* API console */
+.api-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; }
+.api-req { display: flex; flex-direction: column; gap: .6rem; }
+.api-line { display: flex; gap: .4rem; flex-wrap: wrap; }
+.api-line select { flex: 1 1 220px; font-family: var(--mono); font-size: .88rem; }
+.api-line input { flex: 1 1 120px; font-family: var(--mono); font-size: .88rem; }
+textarea.json { font-family: var(--mono); font-size: .82rem; min-height: 9rem; resize: vertical; }
+pre.out { background: var(--rail); color: #efe5cc; font-family: var(--mono); font-size: .8rem; padding: .8rem; margin: 0; overflow: auto; max-height: 26rem; white-space: pre-wrap; word-break: break-word; }
+.status { font-family: var(--mono); font-size: .85rem; padding: .15rem .5rem; color: #fff; display: inline-block; }
+.status.s2 { background: var(--ok); } .status.s4 { background: var(--warn); }
+.curl { font-family: var(--mono); font-size: .78rem; background: var(--code-bg); padding: .5rem .6rem; overflow-x: auto; white-space: pre; }
+.presets { display: flex; gap: .35rem; flex-wrap: wrap; }
+
+@media (max-width: 960px) {
+  .shell { grid-template-columns: 1fr; }
+  .rail { flex-direction: column; gap: .8rem; padding: .9rem 1rem; }
+  .rail nav { flex-direction: row; overflow-x: auto; gap: .2rem; padding-bottom: .2rem; }
+  .rail nav a { border-left: 0; border-bottom: 3px solid transparent; padding: .4rem .55rem; }
+  .rail nav a.is-on { border-bottom-color: var(--gold); }
+  .rail nav .sep { display: none; }
+  .rail-foot { margin-top: 0; display: flex; gap: .8rem; }
+  .stage { padding: 1.2rem 1rem 2.5rem; }
+  .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .split, .api-grid, .race { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) { .lane li { transition: none; } }
+</style>
+</head>
+<body>
+<div class="banner" role="note">
+  <span class="badge">STATIC DEMO</span>
+  <span class="grow">在瀏覽器內模擬 Laravel 版的行為：邏輯照 <code style="background:#3a3127;color:#efe5cc">StockService.php</code> 重寫，資料只存在你的瀏覽器。</span>
+  <a href="./">← 專案介紹</a>
+  <a href="https://github.com/Tai-Ju/php-inventory-wms">GitHub</a>
+  <button class="linkish" id="reset-btn" type="button">重設示範資料</button>
+</div>
+<div id="app"></div>
+
+<script>
+(() => {
+  'use strict';
+
+  const REPO = 'https://github.com/Tai-Ju/php-inventory-wms/blob/main/inventory-wms/';
+  const STORE_KEY = 'wms-demo-v1';
+  const USER = { id: 1, name: '倉管示範帳號', email: 'warehouse@example.com', password: 'password', token: 'demo-api-token' };
+
+  // ---------- data (mirrors DatabaseSeeder) ----------
+  function seed() {
+    const now = Date.now();
+    const iso = (minsAgo) => new Date(now - minsAgo * 60000).toISOString();
+    const items = [
+      ['MED-MASK-01', '醫用口罩', '盒', 80, 20, 'A-01-01'],
+      ['MED-ALC-75', '75% 酒精', '瓶', 8, 15, 'A-01-02'],
+      ['MED-GLV-M', '檢診手套 M', '盒', 5, 10, 'B-02-01'],
+      ['MED-THM-01', '額溫槍', '支', 12, 5, 'C-01-01'],
+      ['MED-GAU-10', '紗布塊 10x10', '包', 40, 12, 'B-03-02'],
+      ['MED-NS-500', '生理食鹽水 500ml', '瓶', 3, 8, 'A-02-03'],
+    ];
+    const products = items.map((r, i) => ({
+      id: i + 1, sku: r[0], name: r[1], unit: r[2], quantity: r[3], safety_stock: r[4],
+      location: r[5], notes: null, created_at: iso(600), updated_at: iso(600),
+    }));
+    // a few sample movements so the dashboard is not empty (quantities above are the result)
+    const movements = [
+      { id: 1, product_id: 1, user_id: 1, type: 'in', quantity: 50, before_qty: 30, after_qty: 80, remark: '進貨單 PO-2026-031', created_at: iso(180) },
+      { id: 2, product_id: 5, user_id: 1, type: 'out', quantity: 10, before_qty: 50, after_qty: 40, remark: '急診領用', created_at: iso(95) },
+      { id: 3, product_id: 6, user_id: 1, type: 'out', quantity: 9, before_qty: 12, after_qty: 3, remark: '病房領用 7B', created_at: iso(30) },
+    ];
+    return { products, movements, nextPid: 7, nextMid: 4, authed: false };
+  }
+
+  let db;
+  function load() {
+    try { const raw = localStorage.getItem(STORE_KEY); if (raw) { db = JSON.parse(raw); return; } } catch (e) { /* storage unavailable */ }
+    db = seed();
+  }
+  function save() { try { localStorage.setItem(STORE_KEY, JSON.stringify(db)); } catch (e) { /* ignore */ } }
+
+  // ---------- helpers ----------
+  const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const fmt = (iso, withYear) => {
+    const d = new Date(iso); const p = (n) => String(n).padStart(2, '0');
+    const md = `${p(d.getMonth() + 1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+    return withYear ? `${d.getFullYear()}-${md.replace('/', '-')}` : md;
+  };
+  const isLow = (p) => p.quantity <= p.safety_stock;           // Product::isLowStock()
+  const lowStock = () => db.products.filter(isLow);              // Product::scopeLowStock()
+  const bySku = (a, b) => a.sku.localeCompare(b.sku);
+  const findProduct = (id) => db.products.find((p) => p.id === Number(id));
+  const latest = (list) => [...list].sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id - a.id);
+  const like = (field, kw) => String(field ?? '').toLowerCase().includes(kw.toLowerCase());
+
+  // ---------- validation (Laravel FormRequest messages, en fallback + zh attributes) ----------
+  const ATTR = { sku: '料號', name: '品名', unit: '單位', safety_stock: '安全庫存', location: '儲位', notes: '備註', product_id: '商品', quantity: '數量', remark: '備註' };
+  const isInt = (v) => typeof v === 'number' ? Number.isInteger(v) : /^-?\d+$/.test(String(v ?? '').trim());
+  const blank = (v) => v === undefined || v === null || String(v).trim() === '';
+
+  function validate(data, rules) {
+    const errors = {};
+    for (const [field, list] of Object.entries(rules)) {
+      const v = data[field]; const a = ATTR[field];
+      for (const rule of list) {
+        let msg = null;
+        const [name, arg] = rule.split(':');
+        if (name === 'required' && blank(v)) msg = `The ${a} field is required.`;
+        else if (blank(v)) { if (list.includes('nullable') || !list.includes('required')) break; }
+        else if (name === 'integer' && !isInt(v)) msg = `The ${a} field must be an integer.`;
+        else if (name === 'min' && isInt(v) && Number(v) < Number(arg)) msg = `The ${a} field must be at least ${arg}.`;
+        else if (name === 'max' && String(v).length > Number(arg)) msg = `The ${a} field must not be greater than ${arg} characters.`;
+        else if (name === 'unique' && db.products.some((p) => p.sku === String(v).trim() && p.id !== Number(arg || 0))) msg = `The ${a} has already been taken.`;
+        else if (name === 'exists' && !findProduct(v)) msg = `The selected ${a} is invalid.`;
+        if (msg) { errors[field] = [msg]; break; }
+      }
+    }
+    return errors;
+  }
+  const productRules = (ignoreId) => ({
+    sku: ['required', 'max:50', `unique:${ignoreId || 0}`], name: ['required', 'max:120'], unit: ['required', 'max:20'],
+    safety_stock: ['required', 'integer', 'min:0'], location: ['nullable', 'max:80'], notes: ['nullable', 'max:500'],
+  });
+  const moveRules = { product_id: ['required', 'integer', 'exists'], quantity: ['required', 'integer', 'min:1'], remark: ['nullable', 'max:255'] };
+  function validationBody(errors) {
+    const msgs = Object.values(errors).map((x) => x[0]);
+    const extra = msgs.length - 1;
+    return { message: msgs[0] + (extra > 0 ? ` (and ${extra} more error${extra > 1 ? 's' : ''})` : ''), errors };
+  }
+  const nn = (v) => (blank(v) ? null : String(v).trim());
+
+  // ---------- StockService (inbound / outbound) ----------
+  class InsufficientStockException extends Error {
+    static for(sku, onHand, requested) { return new InsufficientStockException(`SKU ${sku} 庫存不足（現有 ${onHand}，欲出庫 ${requested}）`); }
+  }
+  function move(type, product, qty, remark) {
+    // DB::transaction + lockForUpdate: in the browser everything is single-threaded, so the read-check-write below is atomic.
+    const locked = findProduct(product.id);
+    const before = locked.quantity;
+    if (type === 'out' && qty > before) throw InsufficientStockException.for(locked.sku, before, qty);
+    locked.quantity = type === 'in' ? before + qty : before - qty;
+    locked.updated_at = new Date().toISOString();
+    const m = { id: db.nextMid++, product_id: locked.id, user_id: USER.id, type, quantity: qty, before_qty: before, after_qty: locked.quantity, remark: nn(remark), created_at: new Date().toISOString() };
+    db.movements.push(m);
+    save();
+    return m;
+  }
+
+  // ---------- router ----------
+  let flash = null;
+  function go(hash, msg) { flash = msg || null; if (location.hash === hash) render(); else location.hash = hash; }
+  function route() {
+    const h = location.hash.replace(/^#\/?/, '');
+    const [path, qs] = h.split('?');
+    return { parts: path.split('/').filter(Boolean), q: new URLSearchParams(qs || '') };
+  }
+
+  // ---------- layout ----------
+  const NAV = [
+    ['dashboard', '庫存看板'], ['products', '商品主檔'], ['stock/in', '入庫'], ['stock/out', '出庫'],
+    ['stock/history', '異動紀錄'], ['products?low=1', '低庫存'], null, ['race', '超賣攻防'], ['api', 'API 測試台'],
+  ];
+  function shell(current, content, sources) {
+    const low = lowStock().length;
+    const nav = NAV.map((n) => {
+      if (!n) return '<div class="sep" aria-hidden="true"></div>';
+      const [href, label] = n;
+      const on = href === current ? ' is-on' : '';
+      const pill = href === 'products?low=1' && low > 0 ? `<span class="pill">${low}</span>` : '';
+      return `<a href="#/${href}" class="${on.trim()}"${on ? ' aria-current="page"' : ''}>${label}${pill}</a>`;
+    }).join('');
+    const src = sources && sources.length
+      ? `<div class="source">對應原始碼：${sources.map(([label, path]) => `<a href="${REPO}${path}" target="_blank" rel="noopener">${esc(label)}</a>`).join('')}</div>` : '';
+    const f = flash ? `<div class="flash ${flash.bad ? 'bad' : 'ok'}" role="status">${esc(flash.text)}</div>` : '';
+    flash = null;
+    return `<div class="shell">
+      <aside class="rail">
+        <div class="brand"><span class="brand-mark">NT</span><div><strong>實習倉 WMS</strong><small>北護 · 簡易庫存</small></div></div>
+        <nav aria-label="主選單">${nav}</nav>
+        <div class="rail-foot"><span>${esc(USER.name)}</span> <button type="button" class="linkish" data-act="logout">登出</button></div>
+      </aside>
+      <main class="stage">${f}${content}${src}</main>
+    </div>`;
+  }
+
+  // ---------- views ----------
+  function viewLogin(err, email) {
+    return `<div class="gate-wrap"><form class="gate" data-form="login" novalidate>
+      <p class="eyebrow">Sign in</p><h1>實習倉 WMS</h1>
+      ${err ? `<div class="flash bad" role="alert">${esc(err)}</div>` : ''}
+      <label>Email<input name="email" type="email" autocomplete="username" value="${esc(email ?? USER.email)}"></label>
+      <label>密碼<input name="password" type="password" autocomplete="current-password" value="password"></label>
+      <button class="btn" type="submit">登入</button>
+      <p class="hint">示範帳號已預填：<code>${USER.email}</code> / <code>password</code>。<br>真實系統用 Session 保存登入狀態，密碼以 <code>hashed</code> cast（bcrypt）存放，表單帶 <code>@csrf</code>。</p>
+    </form></div>`;
+  }
+
+  function productRows(list, cols) {
+    if (!list.length) return `<tr><td colspan="${cols}">沒有符合的商品</td></tr>`;
+    return list.map((p) => `<tr class="${isLow(p) ? 'row-low' : ''}">
+      <td><code>${esc(p.sku)}</code></td><td>${esc(p.name)}</td><td>${esc(p.location || '—')}</td>
+      <td class="num">${p.quantity} ${esc(p.unit)}</td><td class="num">${p.safety_stock}</td>
+      <td><a href="#/products/${p.id}">明細</a></td></tr>`).join('');
+  }
+
+  function viewDashboard(q) {
+    const kw = (q.get('q') || '').trim();
+    const list = db.products.filter((p) => !kw || like(p.sku, kw) || like(p.name, kw) || like(p.location, kw)).sort(bySku);
+    const lows = lowStock().sort((a, b) => a.quantity - b.quantity).slice(0, 8);
+    const recent = latest(db.movements).slice(0, 8);
+    const total = db.products.reduce((s, p) => s + p.quantity, 0);
+    return shell('dashboard', `
+      <header class="page-head"><div><p class="eyebrow">Dashboard</p><h1>庫存看板</h1></div>
+        <form class="search" data-form="search" role="search"><input name="q" value="${esc(kw)}" placeholder="搜尋料號／品名／儲位" aria-label="搜尋料號、品名或儲位"><button class="btn ghost">查詢</button></form></header>
+      <section class="metrics">
+        <article><span>SKU 數</span><strong>${db.products.length}</strong></article>
+        <article><span>總庫存量</span><strong>${total}</strong></article>
+        <article class="${lows.length ? 'warn' : ''}"><span>低庫存品項</span><strong>${lowStock().length}</strong></article>
+        <article><span>最近異動</span><strong>${recent.length}</strong></article>
+      </section>
+      <div class="split">
+        <section class="panel"><h2>庫存查詢結果</h2><div class="table-wrap"><table>
+          <thead><tr><th>料號</th><th>品名</th><th>儲位</th><th>現有</th><th>安全</th><th></th></tr></thead>
+          <tbody>${productRows(list, 6)}</tbody></table></div></section>
+        <section class="panel"><h2>低庫存提醒</h2><ul class="alerts">
+          ${lows.length ? lows.map((p) => `<li><div><strong><a href="#/products/${p.id}">${esc(p.name)}</a></strong><small>${esc(p.sku)} · ${esc(p.location || '—')}</small></div><em>${p.quantity}/${p.safety_stock}</em></li>`).join('') : '<li>目前沒有低庫存。</li>'}
+          </ul><h2>最近入出庫</h2><ul class="alerts">
+          ${recent.length ? recent.map((m) => { const p = findProduct(m.product_id); return `<li><div><strong>${m.type === 'in' ? '入庫' : '出庫'} · ${esc(p ? p.name : '（已刪除）')}</strong><small>${fmt(m.created_at)}</small></div><em class="${m.type}">${m.type === 'in' ? '+' : '−'}${m.quantity}</em></li>`; }).join('') : '<li>尚無異動。</li>'}
+          </ul></section>
+      </div>`, [['DashboardController.php', 'app/Http/Controllers/DashboardController.php'], ['dashboard.blade.php', 'resources/views/dashboard.blade.php'], ['Product::scopeLowStock', 'app/Models/Product.php#L37-L45']]);
+  }
+
+  function viewProducts(q) {
+    const kw = (q.get('q') || '').trim(); const onlyLow = q.get('low') === '1';
+    const list = db.products.filter((p) => (!kw || like(p.sku, kw) || like(p.name, kw)) && (!onlyLow || isLow(p))).sort(bySku);
+    return shell(onlyLow ? 'products?low=1' : 'products', `
+      <header class="page-head"><div><p class="eyebrow">Products</p><h1>${onlyLow ? '低庫存商品' : '商品主檔'}</h1></div>
+        <div class="actions"><a class="btn" href="#/products/create">新增商品</a></div></header>
+      <form class="toolbar panel" data-form="product-filter" role="search">
+        <label>關鍵字<input name="q" value="${esc(kw)}" placeholder="料號或品名"></label>
+        <label class="inline"><input type="checkbox" name="low" value="1" ${onlyLow ? 'checked' : ''}> 只看低庫存</label>
+        <button class="btn ghost">篩選</button></form>
+      <div class="cards">${list.length ? list.map((p) => `<article class="card ${isLow(p) ? 'card-low' : ''}">
+          <header><div><code>${esc(p.sku)}</code><h3 style="margin:.35rem 0 0">${esc(p.name)}</h3></div>${isLow(p) ? '<span class="tag">低庫存</span>' : ''}</header>
+          <p style="margin:.5rem 0 0"><span class="qty">${p.quantity}</span> ${esc(p.unit)} <span class="muted">／ 安全 ${p.safety_stock}</span></p>
+          <p class="muted" style="margin:.2rem 0 0">儲位 ${esc(p.location || '—')}</p>
+          <footer><a href="#/products/${p.id}">明細</a><a href="#/stock/in?product_id=${p.id}">入庫</a><a href="#/stock/out?product_id=${p.id}">出庫</a></footer>
+        </article>`).join('') : '<p class="panel">沒有符合的商品。</p>'}</div>`,
+      [['ProductController@index', 'app/Http/Controllers/ProductController.php'], ['products/index.blade.php', 'resources/views/products/index.blade.php']]);
+  }
+
+  function viewProduct(id) {
+    const p = findProduct(id);
+    if (!p) return shell('products', '<div class="panel"><h1>404</h1><p>找不到這個商品，可能已被刪除。</p><a href="#/products">回商品主檔</a></div>');
+    const moves = latest(db.movements.filter((m) => m.product_id === p.id));
+    return shell('products', `
+      <header class="page-head"><div><p class="eyebrow">${esc(p.sku)}</p><h1>${esc(p.name)}</h1><p style="margin:0">儲位 ${esc(p.location || '—')} · 單位 ${esc(p.unit)}</p></div>
+        <div class="actions"><a class="btn" href="#/stock/in?product_id=${p.id}">入庫</a><a class="btn ghost" href="#/stock/out?product_id=${p.id}">出庫</a><a class="btn ghost" href="#/products/${p.id}/edit">編輯</a><button type="button" class="btn danger" data-act="delete" data-id="${p.id}">刪除</button></div></header>
+      <section class="metrics two">
+        <article class="${isLow(p) ? 'warn' : ''}"><span>現有庫存</span><strong>${p.quantity}</strong></article>
+        <article><span>安全庫存</span><strong>${p.safety_stock}</strong></article></section>
+      ${p.notes ? `<p class="panel">${esc(p.notes)}</p>` : ''}
+      <section class="panel"><h2>異動歷史</h2><div class="table-wrap"><table>
+        <thead><tr><th>時間</th><th>類型</th><th>數量</th><th>異動前 → 後</th><th>人員</th><th>備註</th></tr></thead>
+        <tbody>${moves.length ? moves.map((m) => `<tr><td class="num">${fmt(m.created_at, true)}</td><td><span class="chip ${m.type}">${m.type === 'in' ? '入庫' : '出庫'}</span></td><td class="num">${m.quantity}</td><td class="num">${m.before_qty} → ${m.after_qty}</td><td>${esc(USER.name)}</td><td>${esc(m.remark || '—')}</td></tr>`).join('') : '<tr><td colspan="6">尚無異動</td></tr>'}</tbody>
+      </table></div></section>`,
+      [['ProductController@show', 'app/Http/Controllers/ProductController.php'], ['products/show.blade.php', 'resources/views/products/show.blade.php']]);
+  }
+
+  function viewProductForm(id, old, errors) {
+    const p = id ? findProduct(id) : null;
+    if (id && !p) return viewProduct(id);
+    const v = old || p || { sku: '', name: '', unit: '盒', safety_stock: 10, location: '', notes: '' };
+    const e = errors || {};
+    const field = (name, label, attrs = '') => `<label>${label}<input name="${name}" value="${esc(v[name] ?? '')}" ${attrs} class="${e[name] ? 'is-bad' : ''}"${e[name] ? ` aria-invalid="true" aria-describedby="err-${name}"` : ''}></label>${e[name] ? `<small class="err" id="err-${name}">${esc(e[name][0])}</small>` : ''}`;
+    return shell('products', `
+      <header class="page-head"><div><p class="eyebrow">${p ? 'Edit' : 'Create'}</p><h1>${p ? '編輯商品' : '新增商品'}</h1></div></header>
+      <form class="panel form" data-form="product" data-id="${p ? p.id : ''}" novalidate>
+        ${field('sku', '料號', 'placeholder="例：MED-BND-01"')}
+        ${field('name', '品名')}
+        ${field('unit', '單位')}
+        ${field('safety_stock', '安全庫存', 'inputmode="numeric"')}
+        ${field('location', '儲位', 'placeholder="例：B-02-04"')}
+        <label>備註<textarea name="notes" rows="3" class="${e.notes ? 'is-bad' : ''}">${esc(v.notes ?? '')}</textarea></label>${e.notes ? `<small class="err">${esc(e.notes[0])}</small>` : ''}
+        ${p ? '' : '<p class="muted" style="margin:0;font-size:.88rem">新商品庫存從 0 開始，建立後請到「入庫」補貨。</p>'}
+        <div class="actions"><button class="btn" type="submit">${p ? '儲存' : '建立商品'}</button><a class="btn ghost" href="${p ? `#/products/${p.id}` : '#/products'}">取消</a></div>
+        <p class="muted" style="margin:0;font-size:.85rem">試試看：料號留空、填已存在的 <code>MED-MASK-01</code>，或安全庫存填 <code>-1</code>，會看到和 Laravel FormRequest 相同的錯誤訊息。</p>
+      </form>`, [['ProductRequest.php', 'app/Http/Requests/ProductRequest.php'], ['ProductController@store', 'app/Http/Controllers/ProductController.php']]);
+  }
+
+  function viewStockForm(mode, q, old, errors) {
+    const isIn = mode === 'in';
+    const sel = Number((old && old.product_id) || q.get('product_id') || 0);
+    const e = errors || {};
+    const opts = [...db.products].sort(bySku).map((p) => `<option value="${p.id}" ${p.id === sel ? 'selected' : ''}>${esc(p.sku)} ${esc(p.name)}（現有 ${p.quantity} ${esc(p.unit)}）</option>`).join('');
+    const tip = isIn ? '' : `<p class="muted" style="margin:0;font-size:.85rem">試試看：選「生理食鹽水 500ml」（現有 3）出庫 5，會被 <code>InsufficientStockException</code> 擋下。</p>`;
+    return shell(`stock/${mode}`, `
+      <header class="page-head"><div><p class="eyebrow">${isIn ? 'Inbound' : 'Outbound'}</p><h1>${isIn ? '入庫作業' : '出庫作業'}</h1></div></header>
+      ${e._stock ? `<div class="flash bad" role="alert">${esc(e._stock)}</div>` : ''}
+      <form class="panel form" data-form="stock" data-mode="${mode}" novalidate>
+        <label>商品<select name="product_id" class="${e.product_id ? 'is-bad' : ''}"><option value="">請選擇</option>${opts}</select></label>
+        ${e.product_id ? `<small class="err">${esc(e.product_id[0])}</small>` : ''}
+        <label>數量<input type="number" min="1" name="quantity" inputmode="numeric" value="${esc(old ? old.quantity : '')}" class="${e.quantity ? 'is-bad' : ''}"></label>
+        ${e.quantity ? `<small class="err">${esc(e.quantity[0])}</small>` : ''}
+        <label>備註（單號／用途）<input name="remark" value="${esc(old ? old.remark : '')}" placeholder="${isIn ? '例：進貨單 PO-2026-001' : '例：病房領用 5A'}"></label>
+        <div><button class="btn" type="submit">${isIn ? '確認入庫' : '確認出庫'}</button></div>
+        ${tip}
+      </form>`, [['StockController.php', 'app/Http/Controllers/StockController.php'], [`StockService::${isIn ? 'inbound' : 'outbound'}`, `app/Services/StockService.php#${isIn ? 'L13-L31' : 'L33-L56'}`], ['StockMovementRequest.php', 'app/Http/Requests/StockMovementRequest.php']]);
+  }
+
+  function viewHistory(q) {
+    const type = ['in', 'out'].includes(q.get('type')) ? q.get('type') : '';
+    const list = latest(db.movements.filter((m) => !type || m.type === type));
+    const tab = (t, label) => `<a class="btn ${type === t ? '' : 'ghost'} small" href="#/stock/history${t ? `?type=${t}` : ''}">${label}</a>`;
+    return shell('stock/history', `
+      <header class="page-head"><div><p class="eyebrow">History</p><h1>異動紀錄</h1></div><div class="actions">${tab('', '全部')}${tab('in', '入庫')}${tab('out', '出庫')}</div></header>
+      <section class="panel"><div class="table-wrap"><table>
+        <thead><tr><th>時間</th><th>類型</th><th>料號／品名</th><th>數量</th><th>異動前 → 後</th><th>備註</th></tr></thead>
+        <tbody>${list.length ? list.map((m) => { const p = findProduct(m.product_id); return `<tr><td class="num">${fmt(m.created_at, true)}</td><td><span class="chip ${m.type}">${m.type === 'in' ? '入庫' : '出庫'}</span></td><td>${p ? `<code>${esc(p.sku)}</code> ${esc(p.name)}` : '（已刪除）'}</td><td class="num">${m.quantity}</td><td class="num">${m.before_qty} → ${m.after_qty}</td><td>${esc(m.remark || '—')}</td></tr>`; }).join('') : '<tr><td colspan="6">尚無異動</td></tr>'}</tbody>
+      </table></div></section>`, [['StockController@history', 'app/Http/Controllers/StockController.php#L69-L82'], ['create_stock_movements_table', 'database/migrations/2024_01_01_000004_create_stock_movements_table.php']]);
+  }
+
+  // ---------- race condition visualizer ----------
+  function viewRace() {
+    return shell('race', `
+      <header class="page-head"><div><p class="eyebrow">Concurrency</p><h1>超賣攻防：兩個人同時出庫</h1></div></header>
+      <section class="panel">
+        <p style="margin-top:0">情境：<strong>75% 酒精</strong>現有 <code>8</code> 瓶。A 護理站和 B 護理站<strong>同一瞬間</strong>各送出「出庫 6 瓶」。<br>
+        如果只是「讀庫存 → 判斷夠不夠 → 寫回」，兩個請求會讀到同一個 8，結果兩邊都成功，帳上剩 2 瓶，實際卻被領走 12 瓶。</p>
+        <p>這個系統在 <code>StockService::outbound</code> 用 <code>DB::transaction()</code> 包住，並用 <code>lockForUpdate()</code>（<code>SELECT … FOR UPDATE</code>）鎖住那一列：B 必須等 A 提交後才能讀，讀到的就是 2，自然會被擋下。</p>
+        <div class="actions"><button class="btn" type="button" data-act="race-play">▶ 播放對照</button><span class="muted" style="font-size:.85rem">（這裡是動畫示意，不會改到你的示範資料）</span></div>
+        <div class="race" aria-live="polite">
+          <div class="lane bad" id="lane-bad"><h3>✗ 沒有交易／列鎖</h3><ol></ol><div class="verdict"></div></div>
+          <div class="lane good" id="lane-good"><h3>✓ DB::transaction + lockForUpdate()</h3><ol></ol><div class="verdict"></div></div>
+        </div>
+      </section>
+      <section class="panel"><h2>對應程式碼</h2>
+<pre class="out">public function outbound(Product $product, int $qty, ?string $remark, ?User $user): StockMovement
+{
+    return DB::transaction(function () use ($product, $qty, $remark, $user) {
+        $locked = Product::query()->lockForUpdate()->findOrFail($product->id);
+        $before = $locked->quantity;
+
+        if ($qty > $before) {
+            throw InsufficientStockException::for($locked->sku, $before, $qty);
+        }
+
+        $locked->quantity = $before - $qty;
+        $locked->save();
+        // … 寫入 stock_movements（before_qty / after_qty）
+    });
+}</pre>
+        <p class="muted" style="margin-bottom:0;font-size:.88rem">面試重點：SQLite 是整個資料庫鎖寫入，MySQL InnoDB 才是真正的列鎖；兩者在這段程式碼下結果都正確，換資料庫不用改程式。</p>
+      </section>`, [['StockService::outbound', 'app/Services/StockService.php#L33-L56'], ['InventoryFlowTest', 'tests/Feature/InventoryFlowTest.php']]);
+  }
+  const RACE = {
+    bad: [
+      ['a', 'BEGIN（無鎖）讀取庫存 → 8'], ['b', 'BEGIN（無鎖）讀取庫存 → 8'],
+      ['a', '判斷 6 ≤ 8 ✓，寫回 8 − 6 = 2'], ['b', '判斷 6 ≤ 8 ✓，寫回 8 − 6 = 2'],
+      ['a', '回應 201 出庫成功'], ['b', '回應 201 出庫成功'],
+    ],
+    badVerdict: '帳上還剩 2 瓶，但兩筆共出庫 12 瓶，架上其實只有 8 瓶 → 超賣 4 瓶，帳實不符（lost update）。',
+    good: [
+      ['a', 'BEGIN；SELECT … FOR UPDATE → 8（取得列鎖）'], ['b', 'BEGIN；SELECT … FOR UPDATE → 等待 A 釋放鎖…'],
+      ['a', '判斷 6 ≤ 8 ✓，寫回 2，COMMIT（釋放鎖）'], ['b', '取得鎖，讀到最新值 → 2'],
+      ['b', '判斷 6 > 2 ✗ → InsufficientStockException，ROLLBACK'], ['b', 'API 回 422：SKU MED-ALC-75 庫存不足（現有 2，欲出庫 6）'],
+    ],
+    goodVerdict: '帳上庫存 2，實際領走 6 瓶 → 帳實相符，B 拿到明確錯誤可改量重送。',
+  };
+  let raceTimer = [];
+  function playRace() {
+    raceTimer.forEach(clearTimeout); raceTimer = [];
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    for (const kind of ['bad', 'good']) {
+      const lane = $(`#lane-${kind}`); const ol = $('ol', lane); const vd = $('.verdict', lane);
+      ol.innerHTML = RACE[kind].map(([who, text]) => `<li><span class="who ${who}">${who.toUpperCase()}</span>　${esc(text)}</li>`).join('');
+      vd.textContent = RACE[`${kind}Verdict`]; vd.classList.remove('show');
+      [...ol.children].forEach((li, i) => raceTimer.push(setTimeout(() => li.classList.add('show'), reduce ? 0 : 450 * (i + 1))));
+      raceTimer.push(setTimeout(() => vd.classList.add('show'), reduce ? 0 : 450 * (RACE[kind].length + 1)));
+    }
+  }
+
+  // ---------- API console ----------
+  const ENDPOINTS = [
+    ['GET', '/api/products', null], ['GET', '/api/products?low=1', null], ['GET', '/api/products?q=口罩', null],
+    ['GET', '/api/products/1', null], ['GET', '/api/stock/low', null],
+    ['POST', '/api/stock/in', { product_id: 2, quantity: 20, remark: '進貨單 PO-2026-001' }],
+    ['POST', '/api/stock/out', { product_id: 6, quantity: 5, remark: 'demo outbound' }],
+    ['POST', '/api/products', { sku: 'MED-BND-01', name: '彈性繃帶', unit: '捲', safety_stock: 8, location: 'B-02-04', notes: '無菌包裝' }],
+    ['PUT', '/api/products/3', { sku: 'MED-GLV-M', name: '檢診手套 M', unit: '盒', safety_stock: 4, location: 'B-02-01', notes: null }],
+  ];
+  function viewApi() {
+    const opts = ENDPOINTS.map(([m, p], i) => `<option value="${i}">${m} ${esc(p)}</option>`).join('');
+    return shell('api', `
+      <header class="page-head"><div><p class="eyebrow">REST API</p><h1>API 測試台</h1></div></header>
+      <p class="muted" style="margin-top:-.4rem">模擬 <code>routes/api.php</code> 的 7 個端點，含 <code>VerifyApiToken</code> 中介層。回應格式、狀態碼都和 Laravel 版一致；寫入會真的改到左邊頁面的庫存。</p>
+      <div class="api-grid">
+        <section class="panel api-req">
+          <label>端點<select id="api-ep">${opts}</select></label>
+          <label>Authorization: Bearer<input id="api-token" value="${USER.token}" spellcheck="false" autocomplete="off"></label>
+          <div class="presets"><button type="button" class="btn ghost small" data-act="api-preset" data-k="notoken">拿掉 token（401）</button><button type="button" class="btn ghost small" data-act="api-preset" data-k="badtoken">錯的 token（401）</button><button type="button" class="btn ghost small" data-act="api-preset" data-k="over">超量出庫（422）</button><button type="button" class="btn ghost small" data-act="api-preset" data-k="invalid">欄位錯誤（422）</button></div>
+          <label id="api-body-wrap">Request body（JSON）<textarea id="api-body" class="json" spellcheck="false"></textarea></label>
+          <div><button class="btn" type="button" data-act="api-send">送出請求</button></div>
+          <div><p class="eyebrow" style="margin-top:.4rem">等價 curl</p><div class="curl" id="api-curl"></div></div>
+        </section>
+        <section class="panel"><p class="eyebrow">Response</p><p id="api-status" style="margin:.2rem 0 .6rem"><span class="muted">尚未送出</span></p><pre class="out" id="api-out">// 選一個端點，按「送出請求」</pre></section>
+      </div>`, [['routes/api.php', 'routes/api.php'], ['InventoryApiController.php', 'app/Http/Controllers/Api/InventoryApiController.php'], ['VerifyApiToken.php', 'app/Http/Middleware/VerifyApiToken.php'], ['docs/API.md', '../docs/API.md']]);
+  }
+  function apiSyncBody() {
+    const ep = ENDPOINTS[Number($('#api-ep').value)];
+    const wrap = $('#api-body-wrap');
+    wrap.style.display = ep[2] ? '' : 'none';
+    if (ep[2]) $('#api-body').value = JSON.stringify(ep[2], null, 2);
+    apiCurl();
+  }
+  function apiCurl() {
+    const ep = ENDPOINTS[Number($('#api-ep').value)];
+    const tok = $('#api-token').value.trim();
+    let c = `curl${ep[0] !== 'GET' ? ` -X ${ep[0]}` : ''} http://127.0.0.1:8000${ep[1]}`;
+    if (tok) c += ` \\\n  -H "Authorization: Bearer ${tok}"`;
+    if (ep[2]) { let b = ''; try { b = JSON.stringify(JSON.parse($('#api-body').value)); } catch (e) { b = $('#api-body').value.replace(/\s+/g, ' '); } c += ` \\\n  -H "Content-Type: application/json" \\\n  -d '${b}'`; }
+    $('#api-curl').textContent = c;
+  }
+  const productJson = (p) => ({ id: p.id, sku: p.sku, name: p.name, unit: p.unit, quantity: p.quantity, safety_stock: p.safety_stock, location: p.location, notes: p.notes, created_at: p.created_at, updated_at: p.updated_at });
+  const moveJson = (m) => ({ product_id: m.product_id, user_id: m.user_id, type: m.type, quantity: m.quantity, before_qty: m.before_qty, after_qty: m.after_qty, remark: m.remark, updated_at: m.created_at, created_at: m.created_at, id: m.id });
+
+  function handleApi(method, url, token, body) {
+    // VerifyApiToken middleware
+    if (!token) return [401, { message: '未提供 Bearer Token' }];
+    if (token !== USER.token) return [401, { message: 'Token 無效' }];
+    const u = new URL(url, 'http://127.0.0.1:8000');
+    const path = u.pathname; const q = u.searchParams;
+    const notFound = (id) => [404, { message: `No query results for model [App\\Models\\Product] ${id}` }];
+    let m;
+    if (method === 'GET' && path === '/api/products') {
+      const kw = (q.get('q') || '').trim(); const low = ['1', 'true'].includes(q.get('low'));
+      const data = db.products.filter((p) => (!kw || like(p.sku, kw) || like(p.name, kw)) && (!low || isLow(p))).sort(bySku).map(productJson);
+      return [200, { current_page: 1, data, first_page_url: `${u.origin}/api/products?page=1`, from: data.length ? 1 : null, last_page: 1, per_page: 20, to: data.length || null, total: data.length }];
+    }
+    if (method === 'GET' && path === '/api/stock/low') return [200, lowStock().sort((a, b) => a.quantity - b.quantity).map(productJson)];
+    if ((m = path.match(/^\/api\/products\/(\d+)$/))) {
+      const p = findProduct(m[1]); if (!p) return notFound(m[1]);
+      if (method === 'GET') return [200, { ...productJson(p), movements: latest(db.movements.filter((x) => x.product_id === p.id)).map(moveJson) }];
+      if (method === 'PUT') {
+        const errs = validate(body, productRules(p.id)); if (Object.keys(errs).length) return [422, validationBody(errs)];
+        Object.assign(p, { sku: String(body.sku).trim(), name: String(body.name).trim(), unit: String(body.unit).trim(), safety_stock: Number(body.safety_stock), location: nn(body.location), notes: nn(body.notes), updated_at: new Date().toISOString() });
+        save(); return [200, productJson(p)];
+      }
+    }
+    if (method === 'POST' && path === '/api/products') {
+      const errs = validate(body, productRules()); if (Object.keys(errs).length) return [422, validationBody(errs)];
+      const p = createProduct(body); return [201, productJson(p)];
+    }
+    if (method === 'POST' && (path === '/api/stock/in' || path === '/api/stock/out')) {
+      const errs = validate(body, moveRules); if (Object.keys(errs).length) return [422, validationBody(errs)];
+      const p = findProduct(body.product_id); const type = path.endsWith('/in') ? 'in' : 'out';
+      try { const mv = move(type, p, Number(body.quantity), body.remark); return [201, { movement: moveJson(mv), product: productJson(findProduct(p.id)) }]; }
+      catch (e) { if (e instanceof InsufficientStockException) return [422, { message: e.message }]; throw e; }
+    }
+    return [405, { message: `The ${method} method is not supported for route ${path.slice(1)}.` }];
+  }
+  function apiSend() {
+    const ep = ENDPOINTS[Number($('#api-ep').value)];
+    let body = null;
+    if (ep[2]) { try { body = JSON.parse($('#api-body').value || '{}'); } catch (e) { showApi(400, { message: 'Request body 不是合法 JSON：' + e.message }); return; } }
+    const [status, json] = handleApi(ep[0], ep[1], $('#api-token').value.trim(), body || {});
+    showApi(status, json);
+  }
+  const STATUS_TEXT = { 200: 'OK', 201: 'Created', 400: 'Bad Request', 401: 'Unauthorized', 404: 'Not Found', 405: 'Method Not Allowed', 422: 'Unprocessable Content' };
+  function showApi(status, json) {
+    $('#api-status').innerHTML = `<span class="status ${status < 300 ? 's2' : 's4'}">${status} ${STATUS_TEXT[status] || ''}</span>`;
+    $('#api-out').textContent = JSON.stringify(json, null, 2);
+    // refresh low-stock pill in the rail without a full re-render
+    const pillHost = document.querySelector('.rail nav a[href="#/products?low=1"]');
+    if (pillHost) { const n = lowStock().length; pillHost.innerHTML = `低庫存${n ? `<span class="pill">${n}</span>` : ''}`; }
+  }
+  function apiPreset(k) {
+    const sel = $('#api-ep');
+    if (k === 'notoken') { $('#api-token').value = ''; }
+    else if (k === 'badtoken') { $('#api-token').value = 'guess-token'; }
+    else if (k === 'over') { $('#api-token').value = USER.token; sel.value = '6'; apiSyncBody(); const p = findProduct(6) || db.products[0]; $('#api-body').value = JSON.stringify({ product_id: p.id, quantity: p.quantity + 5, remark: '超量測試' }, null, 2); }
+    else if (k === 'invalid') { $('#api-token').value = USER.token; sel.value = '7'; apiSyncBody(); $('#api-body').value = JSON.stringify({ sku: 'MED-MASK-01', name: '', unit: '盒', safety_stock: -1 }, null, 2); }
+    apiCurl(); apiSend();
+  }
+
+  // ---------- actions ----------
+  function createProduct(body) {
+    const now = new Date().toISOString();
+    const p = { id: db.nextPid++, sku: String(body.sku).trim(), name: String(body.name).trim(), unit: String(body.unit).trim(), quantity: 0, safety_stock: Number(body.safety_stock), location: nn(body.location), notes: nn(body.notes), created_at: now, updated_at: now };
+    db.products.push(p); save(); return p;
+  }
+  const formData = (form) => Object.fromEntries(new FormData(form).entries());
+
+  document.addEventListener('submit', (ev) => {
+    const form = ev.target.closest('form[data-form]'); if (!form) return;
+    ev.preventDefault();
+    const kind = form.dataset.form; const data = formData(form);
+    if (kind === 'login') {
+      if (data.email.trim().toLowerCase() === USER.email && data.password === USER.password) { db.authed = true; save(); go('#/dashboard', { text: `歡迎回來，${USER.name}。` }); }
+      else app.innerHTML = viewLogin('帳號或密碼錯誤。', data.email);
+      return;
+    }
+    if (kind === 'search') { go(`#/dashboard${data.q.trim() ? `?q=${encodeURIComponent(data.q.trim())}` : ''}`); return; }
+    if (kind === 'product-filter') {
+      const qs = new URLSearchParams(); if (data.q.trim()) qs.set('q', data.q.trim()); if (data.low) qs.set('low', '1');
+      go(`#/products${qs.toString() ? `?${qs}` : ''}`); return;
+    }
+    if (kind === 'product') {
+      const id = Number(form.dataset.id) || null;
+      const errs = validate(data, productRules(id));
+      if (Object.keys(errs).length) { app.innerHTML = viewProductForm(id, data, errs); focusFirstError(); return; }
+      if (id) {
+        const p = findProduct(id);
+        Object.assign(p, { sku: data.sku.trim(), name: data.name.trim(), unit: data.unit.trim(), safety_stock: Number(data.safety_stock), location: nn(data.location), notes: nn(data.notes), updated_at: new Date().toISOString() });
+        save(); go(`#/products/${id}`, { text: '商品資料已更新。' });
+      } else { createProduct(data); go('#/products', { text: '商品已建立，庫存為 0，請進行入庫。' }); }
+      return;
+    }
+    if (kind === 'stock') {
+      const mode = form.dataset.mode; const q = route().q;
+      const errs = validate(data, moveRules);
+      if (Object.keys(errs).length) { app.innerHTML = viewStockForm(mode, q, data, errs); focusFirstError(); return; }
+      const p = findProduct(data.product_id);
+      try { move(mode, p, Number(data.quantity), data.remark); go(`#/products/${p.id}`, { text: mode === 'in' ? '入庫完成。' : '出庫完成。' }); }
+      catch (e) {
+        if (!(e instanceof InsufficientStockException)) throw e;
+        app.innerHTML = viewStockForm(mode, q, data, { quantity: [e.message], _stock: '出庫被擋下：交易已回滾，庫存沒有被改動。' }); focusFirstError();
+      }
+    }
+  });
+  function focusFirstError() { const el = document.querySelector('.is-bad'); if (el) el.focus(); }
+
+  document.addEventListener('click', (ev) => {
+    const btn = ev.target.closest('[data-act]'); if (!btn) return;
+    const act = btn.dataset.act;
+    if (act === 'logout') { db.authed = false; save(); go('#/login'); }
+    else if (act === 'delete') {
+      const p = findProduct(btn.dataset.id); if (!p) return;
+      if (btn.dataset.armed !== '1') { btn.dataset.armed = '1'; btn.textContent = '再按一次確認刪除'; setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = ''; btn.textContent = '刪除'; } }, 4000); return; }
+      db.products = db.products.filter((x) => x.id !== p.id);
+      db.movements = db.movements.filter((m) => m.product_id !== p.id); // cascadeOnDelete
+      save(); go('#/products', { text: '商品已刪除。' });
+    }
+    else if (act === 'race-play') playRace();
+    else if (act === 'api-send') apiSend();
+    else if (act === 'api-preset') apiPreset(btn.dataset.k);
+  });
+  document.addEventListener('change', (ev) => { if (ev.target.id === 'api-ep') apiSyncBody(); });
+  document.addEventListener('input', (ev) => { if (ev.target.id === 'api-token' || ev.target.id === 'api-body') apiCurl(); });
+
+  $('#reset-btn').addEventListener('click', () => { const authed = db.authed; db = seed(); db.authed = authed; save(); go(authed ? '#/dashboard' : '#/login', { text: '示範資料已重設。' }); });
+
+  // ---------- render ----------
+  const app = $('#app');
+  function render() {
+    const { parts, q } = route();
+    const [a, b, c] = parts;
+    if (!db.authed) { app.innerHTML = viewLogin(); document.title = '登入 · 實習倉 WMS Demo'; return; }
+    let html; let title = '庫存看板';
+    if (!a || a === 'login' || a === 'dashboard') html = viewDashboard(q);
+    else if (a === 'products' && !b) { html = viewProducts(q); title = q.get('low') === '1' ? '低庫存' : '商品主檔'; }
+    else if (a === 'products' && b === 'create') { html = viewProductForm(null); title = '新增商品'; }
+    else if (a === 'products' && c === 'edit') { html = viewProductForm(Number(b)); title = '編輯商品'; }
+    else if (a === 'products') { html = viewProduct(Number(b)); const p = findProduct(b); title = p ? p.name : '找不到商品'; }
+    else if (a === 'stock' && (b === 'in' || b === 'out')) { html = viewStockForm(b, q); title = b === 'in' ? '入庫' : '出庫'; }
+    else if (a === 'stock' && b === 'history') { html = viewHistory(q); title = '異動紀錄'; }
+    else if (a === 'race') { html = viewRace(); title = '超賣攻防'; }
+    else if (a === 'api') { html = viewApi(); title = 'API 測試台'; }
+    else html = viewDashboard(q);
+    app.innerHTML = html;
+    document.title = `${title} · 實習倉 WMS Demo`;
+    if (a === 'api') apiSyncBody();
+    window.scrollTo(0, 0);
+  }
+
+  load();
+  window.addEventListener('hashchange', render);
+  render();
+})();
+</script>
+</body>
+</html>
