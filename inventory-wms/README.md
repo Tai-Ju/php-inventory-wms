@@ -2,7 +2,7 @@
 
 簡易庫存：商品主檔、入庫、出庫、查詢、低庫存、JSON API。
 
-完整學習地圖與 48 小時計畫見上層 [`../README.md`](../README.md)。
+專案說明、技術重點與畫面見上層 [`../README.md`](../README.md)。
 
 ```bash
 copy .env.example .env

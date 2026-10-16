@@ -1,7 +1,7 @@
 {
     "name": "ntunhs/inventory-wms",
     "type": "project",
-    "description": "48 小時簡易庫存管理系統（Laravel 12 + Blade）",
+    "description": "醫材簡易庫存管理系統（Laravel 12 + Blade）",
     "keywords": ["laravel", "wms", "inventory"],
     "license": "MIT",
     "require": {

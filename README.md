@@ -1,148 +1,148 @@
-# PHP 最小範圍 ＋ 48 小時簡易庫存 WMS
+# 實習倉 WMS｜醫材簡易庫存管理系統
+
+以 **Laravel 12** 開發的庫存管理系統，涵蓋商品主檔、入庫／出庫、低庫存提醒、異動稽核，以及一組 Bearer Token REST API。
 
 🌐 **專案介紹**：https://tai-ju.github.io/php-inventory-wms/  
 ⚡ **互動 Demo**：https://tai-ju.github.io/php-inventory-wms/demo.html
 
-對應目標：看懂 PHP、能改小型 CRUD，並用 Laravel 做出可貼 GitHub 的庫存系統（商品、入庫、出庫、查詢、低庫存）。情境贴近倉儲／MES 的「料號、儲位、安全庫存」。
+![PHP](https://img.shields.io/badge/PHP-8.2%2B-777BB4?logo=php&logoColor=white)
+![Laravel](https://img.shields.io/badge/Laravel-12-FF2D20?logo=laravel&logoColor=white)
+![SQLite / MySQL](https://img.shields.io/badge/DB-SQLite%20%2F%20MySQL-3f5c3a)
+![Tests](https://img.shields.io/badge/PHPUnit-3%20feature%20tests-2f6b4f)
 
-> 需要 PHP 8.2+ 與 Composer。Windows 建議用 [Laravel Herd](https://herd.laravel.com/windows)，內建 PHP 與 Composer。
+---
 
-## 資料夾
+## 為什麼做這個專案
 
-| 路徑 | 用途 |
+我的背景在醫療院所，這個專案以醫院的醫材倉儲為情境，用 PHP／Laravel 做出一個小型庫存系統，資料欄位對應倉儲／MES 常見的「料號、儲位、安全庫存」。目的是熟悉 Laravel 的開發方式，同時處理庫存系統最核心的問題：**多人同時出庫時，帳不能錯。**
+
+## 畫面
+
+| 庫存看板 | 商品主檔 |
 | --- | --- |
-| [`learn/`](learn/README.md) | PHP／Web／PDO／安全必學範例 |
-| [`inventory-wms/`](inventory-wms/) | Laravel 12 庫存系統（Blade + MySQL/SQLite） |
-| [`docs/API.md`](docs/API.md) | REST API 文件 |
-| [`docs/screenshots/`](docs/screenshots/) | 放 README 用截圖 |
+| ![庫存看板](docs/screenshots/01-dashboard.png) | ![商品主檔](docs/screenshots/02-products.png) |
+| **出庫超量被擋下** | **超賣攻防：有鎖 vs 沒鎖** |
+| ![出庫](docs/screenshots/03-stock-out.png) | ![超賣攻防](docs/screenshots/04-race.png) |
 
-## 必學最小範圍（先會這些再寫 Laravel）
+> 截圖取自[互動 Demo](https://tai-ju.github.io/php-inventory-wms/demo.html)，介面與 Laravel 版相同。
 
-**PHP：** 變數、陣列、`foreach`、函式、條件、OOP、例外。  
-**Web：** GET／POST、表單、Session／Cookie、HTTP 狀態碼。  
-**資料庫：** PDO Prepared Statements（面試常問 SQL Injection）。  
-**Laravel：** MVC、Route、Controller、Blade、Eloquent、Migration、Form Request、Middleware。  
-**安全：** CSRF、XSS、SQL Injection、密碼雜湊。
+## 功能
 
-對照實作位置：見 [`learn/README.md`](learn/README.md)。
+- **商品主檔**：新增、編輯、刪除，料號唯一；新商品庫存從 0 開始，只能透過入庫增加
+- **入庫／出庫**：每筆都寫入異動紀錄，保留「異動前 → 異動後」數量與經手人，方便稽核
+- **防止超賣**：出庫數量大於現有量會被擋下；多人同時出庫也不會讓帳實不符（見下方說明）
+- **低庫存提醒**：現有量 ≤ 安全庫存時標紅，看板與側欄顯示件數
+- **庫存查詢**：依料號、品名、儲位搜尋；異動紀錄可篩選入庫／出庫
+- **REST API**：7 個端點，Bearer Token 驗證，詳見 [`docs/API.md`](docs/API.md)
 
-## 環境（Windows）
+## 技術重點
 
-1. 安裝 [XAMPP](https://www.apachefriends.org/)（PHP 8.2+、MySQL）或獨立 PHP 8.2。
-2. 安裝 [Composer](https://getcomposer.org/)。
-3. 把 `C:\xampp\php` 加進 PATH，新開終端機執行 `php -v`、`composer -V`。
+### 1. 交易＋列鎖，避免同時出庫造成超賣
 
-本專案預設 **SQLite**，沒開 MySQL 也能先跑。要改 MySQL：建立資料庫 `inventory_wms`，並改 `inventory-wms/.env`。
+庫存 8 瓶，兩個人同時各出庫 6 瓶。如果只是「讀取 → 判斷 → 寫回」，兩個請求都會讀到 8、都判斷成功，帳上剩 2 瓶，實際上卻超賣了。
 
-## 48 小時怎麼排
+所有入出庫都集中在 [`StockService`](inventory-wms/app/Services/StockService.php)，用 `DB::transaction()` 包住，並以 `lockForUpdate()`（`SELECT … FOR UPDATE`）鎖住該商品：第二個請求必須等第一個提交後才能讀取，讀到的是最新的 2，於是被 `InsufficientStockException` 擋下並回滾。
 
-### 第 0–6 小時：語法能跑
+```php
+return DB::transaction(function () use ($product, $qty, $remark, $user) {
+    $locked = Product::query()->lockForUpdate()->findOrFail($product->id);
+    $before = $locked->quantity;
 
-把 `learn/01`～`06` 逐檔執行，改數字、改條件，直到你能自己寫「庫存不足就拒絕出庫」。
+    if ($qty > $before) {
+        throw InsufficientStockException::for($locked->sku, $before, $qty);
+    }
 
-### 第 6–12 小時：Web + PDO
-
-跑 `07`～`11`。重點記住四句話：
-
-- 查詢用 GET，寫入用 POST。
-- 登入狀態放 Session，不要把密碼放 Cookie。
-- SQL 永遠用綁定參數，不要把使用者輸入接進字串。
-- 輸出 HTML 用跳脫（Blade 的 `{{ }}`），表單加 CSRF。
-
-### 第 12–36 小時：把庫存系統跑起來並讀程式
-
-在 `inventory-wms/`：
-
-```bash
-cd inventory-wms
-copy .env.example .env
-composer install
-php artisan key:generate
-php artisan migrate --seed
-php artisan serve
+    $locked->quantity = $before - $qty;
+    $locked->save();
+    // 寫入 stock_movements（before_qty / after_qty）
+});
 ```
 
-瀏覽器開啟 http://127.0.0.1:8000
+### 2. 分層：網頁與 API 共用同一套規則
 
-> **Windows 小提醒**
-> - 也可以直接點兩下 `inventory-wms/setup.bat`，一次完成安裝、建表、測試與啟動。
-> - 若 `php artisan serve` 出現 `Failed to listen on 127.0.0.1:8000 (reason: ?)`，改用 PHP 內建伺服器：
->   ```powershell
->   cd public; php -S 127.0.0.1:8000 ..\vendor\laravel\framework\src\Illuminate\Foundation\resources\server.php
->   ```
-> - 專案不建議放在 OneDrive 同步資料夾內，SQLite 檔可能被鎖住。
-
-示範帳號：`warehouse@example.com` / `password`  
-API Token：`demo-api-token`（見 [`docs/API.md`](docs/API.md)）
-
-請自己點完這條路，並對照原始碼：
-
-1. 登入（Session、CSRF、`password` hashed cast）
-2. 看板查庫存、看低庫存紅字
-3. 新增商品 → 編輯 → 入庫 → 出庫（數量大於庫存應被擋）
-4. 異動紀錄
-5. 用 curl 打 `/api/stock/low`
-
-對應檔案：
-
-- Route：`inventory-wms/routes/web.php`、`routes/api.php`
-- Controller：`app/Http/Controllers/*`
-- Validation：`app/Http/Requests/*`
-- Eloquent：`app/Models/Product.php`、`StockMovement.php`
-- 入出庫交易：`app/Services/StockService.php`
-- Migration：`database/migrations/*`
-- Middleware：`app/Http/Middleware/Authenticate.php`、`VerifyApiToken.php`
-- Blade：`resources/views/*`
-
-### 第 36–48 小時：GitHub 展示包
-
-1. 截四張圖放到 `docs/screenshots/`（說明見該資料夾）。
-2. 把本 README 的截圖區塊取消註解並改路徑。
-3. 建立 repo、推上去（不要提交 `.env`）。
-4. README 寫：功能、如何安裝、帳號、API 連結、你改過哪一段。
-
-```bash
-git init
-git add .
-git commit -m "Add PHP learning path and Laravel inventory WMS"
+```
+Route → Middleware → Form Request → Controller → StockService → Eloquent → DB
+                                                       │
+                                     Blade 畫面（Web） ┴ JSON（API）
 ```
 
-## 功能清單
+- 驗證規則集中在 Form Request（`ProductRequest`、`StockMovementRequest`）
+- 商業邏輯集中在 `StockService`，Controller 只負責接收請求與回應
+- 因此網頁表單與 API 的入出庫行為保證一致
 
-- 商品列表／新增／編輯／刪除
-- 入庫、出庫（交易＋列鎖，避免超賣）
-- 庫存查詢（料號、品名、儲位）
-- 低庫存提醒（現有量 ≤ 安全庫存）
-- 登入／註冊、Bearer API
-
-## 畫面截圖
-
-（跑起來後貼上）
-
-<!--
-![看板](docs/screenshots/01-dashboard.png)
-![商品](docs/screenshots/02-products.png)
-![出庫](docs/screenshots/03-stock-out.png)
-![低庫存](docs/screenshots/04-low-stock.png)
--->
-
-## 安全對照
+### 3. 安全
 
 | 風險 | 作法 |
 | --- | --- |
-| CSRF | Blade `@csrf`；Laravel web 中介層驗證 |
-| XSS | `{{ $name }}` 自動跳脫；不要用 `{!! !!}` 輸出使用者輸入 |
-| SQL Injection | Eloquent / Query Builder，不拼接 SQL |
-| 密碼 | `User` 的 `hashed` cast（底層 `password_hash`） |
-| API Token | 資料庫只存 SHA-256，不明文存放 |
+| SQL Injection | 全部透過 Eloquent／Query Builder（底層 PDO Prepared Statements），不拼接 SQL |
+| XSS | Blade `{{ }}` 自動跳脫，不以 `{!! !!}` 輸出使用者輸入 |
+| CSRF | 表單帶 `@csrf`，由 web 中介層驗證 |
+| 密碼 | `User` 模型的 `hashed` cast（bcrypt） |
+| API Token | 資料庫只存 SHA-256 雜湊，不存明文 |
 
-## MySQL（可選）
+### 4. 測試
+
+[`tests/Feature/InventoryFlowTest.php`](inventory-wms/tests/Feature/InventoryFlowTest.php) 涵蓋：未登入導向、建立商品並入出庫、出庫超量被拒絕。
+
+## 專案結構
+
+```
+inventory-wms/
+├── app/
+│   ├── Http/Controllers/     Dashboard、Product、Stock、Auth、Api/InventoryApi
+│   ├── Http/Middleware/      Authenticate、VerifyApiToken
+│   ├── Http/Requests/        ProductRequest、StockMovementRequest
+│   ├── Models/               Product、StockMovement、User
+│   ├── Services/             StockService（入出庫交易）
+│   └── Exceptions/           InsufficientStockException
+├── database/migrations/      products、stock_movements 等資料表
+├── resources/views/          Blade 畫面
+├── routes/                   web.php、api.php
+└── tests/Feature/            功能測試
+docs/                         API 文件、GitHub Pages（介紹頁與互動 Demo）
+learn/                        開發前的 PHP 基礎練習（見 learn/README.md）
+```
+
+## 安裝與執行
+
+需要 **PHP 8.2+** 與 **Composer**。Windows 建議安裝 [Laravel Herd](https://herd.laravel.com/windows)，已內建 PHP 與 Composer。
+
+```bash
+git clone https://github.com/Tai-Ju/php-inventory-wms
+cd php-inventory-wms/inventory-wms
+cp .env.example .env          # Windows：copy .env.example .env
+composer install
+php artisan key:generate
+php artisan migrate --seed    # 預設 SQLite，免安裝資料庫
+php artisan test
+php artisan serve
+```
+
+開啟 http://127.0.0.1:8000
+
+- 示範帳號：`warehouse@example.com` / `password`
+- API Token：`demo-api-token`
+
+<details>
+<summary>Windows 注意事項</summary>
+
+- 可直接點兩下 `inventory-wms/setup.bat`，一次完成安裝、建表、測試與啟動。
+- 若 `php artisan serve` 出現 `Failed to listen on 127.0.0.1:8000 (reason: ?)`，改用 PHP 內建伺服器：
+  ```powershell
+  cd public; php -S 127.0.0.1:8000 ..\vendor\laravel\framework\src\Illuminate\Foundation\resources\server.php
+  ```
+- 專案不建議放在 OneDrive 等同步資料夾，SQLite 檔可能被鎖住。
+
+</details>
+
+<details>
+<summary>改用 MySQL</summary>
 
 ```sql
 CREATE DATABASE inventory_wms CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
-`.env`：
+修改 `inventory-wms/.env`：
 
 ```
 DB_CONNECTION=mysql
@@ -153,4 +153,31 @@ DB_USERNAME=root
 DB_PASSWORD=
 ```
 
-然後 `php artisan migrate --seed`。
+再執行 `php artisan migrate --seed`。在 MySQL InnoDB 下，`lockForUpdate()` 會是真正的列鎖。
+
+</details>
+
+## API 範例
+
+```bash
+curl -H "Authorization: Bearer demo-api-token" http://127.0.0.1:8000/api/stock/low
+
+curl -X POST http://127.0.0.1:8000/api/stock/out \
+  -H "Authorization: Bearer demo-api-token" \
+  -H "Content-Type: application/json" \
+  -d '{"product_id": 6, "quantity": 5, "remark": "病房領用"}'
+# 庫存不足 → 422 {"message": "SKU MED-NS-500 庫存不足（現有 3，欲出庫 5）"}
+```
+
+完整端點與狀態碼見 [`docs/API.md`](docs/API.md)，也可以在 [Demo 的 API 測試台](https://tai-ju.github.io/php-inventory-wms/demo.html#/api)直接送請求。
+
+## 後續可以加強
+
+- 角色權限（倉管／領用單位／主管）與出庫審核
+- 批號與效期管理（先進先出、近效期提醒）
+- 盤點作業與盤差調整
+- 以排程或 Webhook 在低庫存時自動通知
+
+---
+
+示範資料皆為虛構。

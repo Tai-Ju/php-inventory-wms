@@ -38,3 +38,39 @@ php -S 127.0.0.1:8080 -t learn
 | HTTP 狀態碼 | API 200／201／401／422 |
 | PDO Prepared | Eloquent 底層就是這個 |
 | CSRF／XSS／雜湊 | Blade `@csrf`、`{{ }}`、password cast |
+
+## 學習順序
+
+### 1. 語法能跑（`01`～`06`）
+
+逐檔執行，改數字、改條件，直到能自己寫出「庫存不足就拒絕出庫」。
+
+### 2. Web 與資料庫（`07`～`11`）
+
+重點記住四句話：
+
+- 查詢用 GET，寫入用 POST。
+- 登入狀態放 Session，不要把密碼放 Cookie。
+- SQL 永遠用綁定參數，不要把使用者輸入接進字串。
+- 輸出 HTML 要跳脫（Blade 的 `{{ }}`），表單加 CSRF。
+
+### 3. 讀庫存系統的程式
+
+把系統跑起來，照這條路操作一遍，再對照原始碼：
+
+1. 登入（Session、CSRF、`password` 的 hashed cast）
+2. 看板查庫存、看低庫存紅字
+3. 新增商品 → 編輯 → 入庫 → 出庫（數量大於庫存應被擋）
+4. 異動紀錄
+5. 用 curl 打 `/api/stock/low`
+
+| 觀念 | 檔案 |
+| --- | --- |
+| Route | `inventory-wms/routes/web.php`、`routes/api.php` |
+| Controller | `app/Http/Controllers/*` |
+| Validation | `app/Http/Requests/*` |
+| Eloquent | `app/Models/Product.php`、`StockMovement.php` |
+| 入出庫交易 | `app/Services/StockService.php` |
+| Migration | `database/migrations/*` |
+| Middleware | `app/Http/Middleware/Authenticate.php`、`VerifyApiToken.php` |
+| Blade | `resources/views/*` |
