@@ -1,7 +1,7 @@
 # PHP 最小範圍 ＋ 48 小時簡易庫存 WMS
 
 🌐 **專案介紹**：https://tai-ju.github.io/php-inventory-wms/  
-⚡ **互動 Demo**：https://tai-ju.github.io/php-inventory-wms/demo.html（瀏覽器內模擬入出庫、超賣防護與 API）
+⚡ **互動 Demo**：https://tai-ju.github.io/php-inventory-wms/demo.html
 
 對應目標：看懂 PHP、能改小型 CRUD，並用 Laravel 做出可貼 GitHub 的庫存系統（商品、入庫、出庫、查詢、低庫存）。情境贴近倉儲／MES 的「料號、儲位、安全庫存」。
 
