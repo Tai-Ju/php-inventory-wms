@@ -2,14 +2,14 @@
 
 對應目標：看懂 PHP、能改小型 CRUD，並用 Laravel 做出可貼 GitHub 的庫存系統（商品、入庫、出庫、查詢、低庫存）。情境贴近倉儲／MES 的「料號、儲位、安全庫存」。
 
-> 目前這台電腦的 PATH 裡還沒有 `php` / `composer`。請先裝環境，再依 48 小時表操作。
+> 需要 PHP 8.2+ 與 Composer。Windows 建議用 [Laravel Herd](https://herd.laravel.com/windows)，內建 PHP 與 Composer。
 
 ## 資料夾
 
 | 路徑 | 用途 |
 | --- | --- |
 | [`learn/`](learn/README.md) | PHP／Web／PDO／安全必學範例 |
-| [`inventory-wms/`](inventory-wms/) | Laravel 11 庫存系統（Blade + MySQL/SQLite） |
+| [`inventory-wms/`](inventory-wms/) | Laravel 12 庫存系統（Blade + MySQL/SQLite） |
 | [`docs/API.md`](docs/API.md) | REST API 文件 |
 | [`docs/screenshots/`](docs/screenshots/) | 放 README 用截圖 |
 
@@ -60,6 +60,14 @@ php artisan serve
 ```
 
 瀏覽器開啟 http://127.0.0.1:8000
+
+> **Windows 小提醒**
+> - 也可以直接點兩下 `inventory-wms/setup.bat`，一次完成安裝、建表、測試與啟動。
+> - 若 `php artisan serve` 出現 `Failed to listen on 127.0.0.1:8000 (reason: ?)`，改用 PHP 內建伺服器：
+>   ```powershell
+>   cd public; php -S 127.0.0.1:8000 ..\vendor\laravel\framework\src\Illuminate\Foundation\resources\server.php
+>   ```
+> - 專案不建議放在 OneDrive 同步資料夾內，SQLite 檔可能被鎖住。
 
 示範帳號：`warehouse@example.com` / `password`  
 API Token：`demo-api-token`（見 [`docs/API.md`](docs/API.md)）
