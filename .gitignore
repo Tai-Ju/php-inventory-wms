@@ -1,0 +1,7 @@
+.DS_Store
+Thumbs.db
+learn/storage-demo.sqlite
+inventory-wms/vendor
+inventory-wms/.env
+inventory-wms/database/database.sqlite
+inventory-wms/database/database.sqlite-journal
